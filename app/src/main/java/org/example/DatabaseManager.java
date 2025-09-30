@@ -2,6 +2,7 @@ package org.example;
 
 import java.util.ArrayList;
 import java.util.List;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -78,7 +79,8 @@ public class DatabaseManager {
 				String author = resultSet.getString("author");
 				boolean isAvailable = resultSet.getBoolean("is_available");
 
-				books.add(new Book(id, title, author, isAvailable));
+				Book book = new Book(id, title, author, isAvailable);
+				books.add(book);
 			}
 
 		} catch (SQLException e) {
@@ -98,11 +100,74 @@ public class DatabaseManager {
 				PreparedStatement statement = connection.prepareStatement(sql);
 				ResultSet resultSet = statement.executeQuery();) {
 
-			// TODO: Do this
+			while (resultSet.next()) {
+				int id = resultSet.getInt("id");
+				String title = resultSet.getString("name");
 
-		} catch (Exception e) {
-			// TODO: handle exception
+				Member member = new Member(id, title);
+				members.add(member);
+			}
+
+		} catch (SQLException e) {
+			e.printStackTrace();
 		}
+
+		return members;
+	}
+
+	public void borrowBook(Book book) {
+
+		String updateSql = "UPDATE books SET is_available = false WHERE id = ?";
+
+		boolean isBookAvailable = isBookAvailable(book.getId());
+
+		if (isBookAvailable) {
+			markBookUnavailable(book.getId());
+		}
+	}
+
+	private void markBookUnavailable(long id) {
+
+		String updateSql = "UPDATE books SET is_available = false WHERE id = ?";
+
+		try (Connection connection = getConnection();
+				PreparedStatement statement = connection.prepareStatement(updateSql);) {
+
+			statement.setLong(1, id);
+
+			statement.executeUpdate();
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private boolean isBookAvailable(long id) {
+
+		String checkSql = "SELECT is_available FROM books WHERE id = ?";
+
+		try (Connection connection = getConnection();
+				PreparedStatement statement = connection.prepareStatement(checkSql);) {
+
+			statement.setLong(1, id);
+
+			ResultSet resultSet = statement.executeQuery();
+
+			if (!resultSet.next()) {
+				System.out.println("Book with " + id + " not found");
+				return false;
+			}
+
+			if (!resultSet.getBoolean("is_available")) {
+				System.out.println("This book with " + id + " is not available.");
+				return false;
+			}
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+
+		return true;
 	}
 
 	private Connection getConnection() throws SQLException {

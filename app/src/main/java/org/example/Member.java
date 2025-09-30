@@ -12,7 +12,21 @@ public class Member {
 	private ArrayList<Book> borrowedBooks;
 
 	public Member() {
-		borrowedBooks = new ArrayList<Book>();
+		this(0, null, null);
+	}
+
+	public Member(long id) {
+		this(id, null, null);
+	}
+
+	public Member(long id, String name) {
+		this(id, name, null);
+	}
+
+	public Member(long id, String name, ArrayList<Book> bookList) {
+		this.id = id;
+		this.name = name;
+		this.borrowedBooks = bookList;
 	}
 
 	public String getName() {
