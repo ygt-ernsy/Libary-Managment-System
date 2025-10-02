@@ -14,83 +14,20 @@ import java.sql.SQLException;
  */
 public class DatabaseManager {
 
-	public void saveBook(Book book) throws SQLException {
-		/*
-		 * The ? are placeholders for the actual values
-		 * Using placeholders prevents SQL injection and allows you to reuse the
-		 * statement with different values.
-		 */
-		String sql = "INSERT INTO books (title, author, is_available) VALUES (?, ?, ?)";
-
-		try ( // Establish connection to sql database
-				Connection connection = getConnection();
-
-				// PreparedStatement allows you to safely insert dynamic values in place of the
-				// ? placeholders
-				PreparedStatement statement = connection.prepareStatement(sql);) {
-
-			statement.setString(1, book.getTitle());
-			statement.setString(2, book.getAuthor());
-			statement.setBoolean(3, book.isAvaible());
-
-			statement.executeUpdate();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-
-	}
-
 	public void saveMember(Member member) throws SQLException {
 
-		String sql = "INSERT INTO members (name) VALUE (?)";
+		String sql = "INSERT INTO members (name) VALUES (?)";
 
 		try (Connection connection = getConnection();
 				PreparedStatement statement = connection.prepareStatement(sql)) {
 
 			statement.setString(1, member.getName());
+			statement.executeUpdate();
 
-		} catch (SQLException e) {
-			e.printStackTrace();
 		}
-
 	}
 
-	public List<Book> getAllBooks() throws SQLException {
-
-		List<Book> books = new ArrayList<>();
-
-		// Retrieves all columns needed to construct a Book
-		String sql = "SELECT id, title, author, is_available FROM books";
-
-		try (Connection connection = getConnection();
-				PreparedStatement statement = connection.prepareStatement(sql);
-				ResultSet resultSet = statement.executeQuery();) {
-
-			/*
-			 * executeQuery() is used for SELECT statements.
-			 * Returns a ResultSet, which is essentially a table of results from the
-			 * database
-			 */
-
-			// Loop over resultset
-			while (resultSet.next()) {
-				int id = resultSet.getInt("id");
-				String title = resultSet.getString("title");
-				String author = resultSet.getString("author");
-				boolean isAvailable = resultSet.getBoolean("is_available");
-
-				Book book = new Book(id, title, author, isAvailable);
-				books.add(book);
-			}
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-
-		return books;
-	}
-
-	public List<Member> getAllMembers() {
+	public List<Member> getAllMembers() throws SQLException {
 
 		List<Member> members = new ArrayList<>();
 
@@ -102,87 +39,145 @@ public class DatabaseManager {
 
 			while (resultSet.next()) {
 				int id = resultSet.getInt("id");
-				String title = resultSet.getString("name");
+				String name = resultSet.getString("name");
 
-				Member member = new Member(id, title);
+				Member member = new Member(id, name);
 				members.add(member);
 			}
-
-		} catch (SQLException e) {
-			e.printStackTrace();
 		}
-
 		return members;
 	}
 
-	public void borrowBook(Book book) {
+	public void borrowBook(long memberId, long bookId) throws SQLException {
+		String updateBookSql = "UPDATE books SET is_available = false WHERE id = ? AND is_available = true;";
 
-		String updateSql = "UPDATE books SET is_available = false WHERE id = ?";
+		try (Connection connection = getConnection()) {
+			connection.setAutoCommit(false);
 
-		boolean isBookAvailable = isBookAvailable(book.getId());
+			try {
+				try (PreparedStatement updateStatement = connection.prepareStatement(updateBookSql)) {
+					updateStatement.setLong(1, bookId);
+					int rowsAffected = updateStatement.executeUpdate();
 
-		if (isBookAvailable) {
-			markBookUnavailable(book.getId());
+					if (rowsAffected != 1) {
+						connection.rollback();
+						throw new SQLException("Book with ID " + bookId
+								+ " is not available or does not exist.");
+					}
+				}
+
+				addBorrows(memberId, bookId, connection);
+
+				connection.commit();
+
+			} catch (SQLException e) {
+				connection.rollback();
+				throw e;
+			} finally {
+				connection.setAutoCommit(true);
+			}
+		}
+		// TODO: This is not fully done, It works though
+	}
+
+	public void returnBook(long memberId, long bookId) throws SQLException {
+		String sqlBook = "UPDATE books SET is_available = true WHERE id = ?";
+		String sqlBorrow = "UPDATE borrows SET return_date = CURRENT_TIMESTAMP " +
+				"WHERE member_id = ? AND book_id = ? AND return_date IS NULL";
+
+		try (Connection connection = getConnection()) {
+			connection.setAutoCommit(false);
+
+			try (
+					PreparedStatement stmtBook = connection.prepareStatement(sqlBook);
+					PreparedStatement stmtBorrow = connection.prepareStatement(sqlBorrow)) {
+				// Update books
+				stmtBook.setLong(1, bookId);
+				stmtBook.executeUpdate();
+
+				// Update borrows
+				stmtBorrow.setLong(1, memberId);
+				stmtBorrow.setLong(2, bookId);
+				stmtBorrow.executeUpdate();
+
+				connection.commit();
+			} catch (SQLException e) {
+				connection.rollback();
+				throw e;
+			} finally {
+				connection.setAutoCommit(true);
+			}
 		}
 	}
 
-	private void markBookUnavailable(long id) {
+	private void addBorrows(long memberId, long bookId, Connection connection) throws SQLException {
 
-		String updateSql = "UPDATE books SET is_available = false WHERE id = ?";
+		String sql = "INSERT INTO borrows (member_id, book_id) VALUES (?,?)";
 
-		try (Connection connection = getConnection();
-				PreparedStatement statement = connection.prepareStatement(updateSql);) {
+		try (PreparedStatement statement = connection.prepareStatement(sql)) {
 
-			statement.setLong(1, id);
+			statement.setLong(1, memberId);
+			statement.setLong(2, bookId);
 
 			statement.executeUpdate();
-
-		} catch (SQLException e) {
-			e.printStackTrace();
 		}
 	}
 
-	private boolean isBookAvailable(long id) {
+	private Member mapMemberWithId(long id, PreparedStatement statement) throws SQLException {
 
-		String checkSql = "SELECT is_available FROM books WHERE id = ?";
+		statement.setLong(1, id);
 
-		try (Connection connection = getConnection();
-				PreparedStatement statement = connection.prepareStatement(checkSql);) {
-
-			statement.setLong(1, id);
-
-			ResultSet resultSet = statement.executeQuery();
+		try (ResultSet resultSet = statement.executeQuery();) {
 
 			if (!resultSet.next()) {
-				System.out.println("Book with " + id + " not found");
-				return false;
+				throw new SQLException("Member with " + id + " does not exist!");
 			}
 
-			if (!resultSet.getBoolean("is_available")) {
-				System.out.println("This book with " + id + " is not available.");
-				return false;
-			}
+			String name = resultSet.getString("name");
 
-		} catch (SQLException e) {
-			e.printStackTrace();
+			Member returnedMember = new Member(id, name);
+
+			return returnedMember;
+
 		}
+	}
 
-		return true;
+	public Member getMemberById(long id) throws SQLException {
+
+		String sql = "SELECT name FROM members WHERE id = ?";
+
+		try (Connection connection = getConnection();
+				PreparedStatement statement = connection.prepareStatement(sql)) {
+
+			Member returnedMember = mapMemberWithId(id, statement);
+
+			return returnedMember;
+		}
+	}
+
+	public Member deleteMember(long id) throws SQLException {
+
+		Member deletedMember = getMemberById(id);
+
+		String deleteSql = "DELETE FROM members WHERE id = ?";
+
+		try (Connection connection = getConnection();
+				PreparedStatement statement = connection.prepareStatement(deleteSql)) {
+
+			statement.setLong(1, id);
+			statement.executeUpdate();
+
+			return deletedMember;
+		}
 	}
 
 	private Connection getConnection() throws SQLException {
 
-		try {
-			String url = "jdbc:postgresql://localhost:5432/mylibrary";
-			String name = "myuser";
-			String password = "mypassword";
-			Connection connection = DriverManager.getConnection(url, name, password);
+		String url = "jdbc:postgresql://localhost:5432/mylibrary";
+		String name = "myuser";
+		String password = "mypassword";
+		Connection connection = DriverManager.getConnection(url, name, password);
 
-			return connection;
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-			return null;
-		}
+		return connection;
 	}
 }

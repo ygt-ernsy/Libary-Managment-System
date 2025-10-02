@@ -1,4 +1,4 @@
-package org.example;
+package org.example.model;
 
 /**
  * Book
@@ -8,7 +8,7 @@ public class Book {
 	private int numberOfPages;
 	private String title;
 	private String author;
-	private boolean avaible;
+	private boolean available;
 
 	public Book() {
 	}
@@ -22,11 +22,11 @@ public class Book {
 		this.id = id;
 		this.title = title;
 		this.author = author;
-		this.avaible = avaible;
+		this.available = avaible;
 	}
 
-	public boolean isAvaible() {
-		return avaible;
+	public boolean isAvailable() {
+		return available;
 	}
 
 	public String getTitle() {
