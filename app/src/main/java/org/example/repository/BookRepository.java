@@ -2,6 +2,10 @@ package org.example.repository;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import org.example.DatabaseUtils;
+import org.example.model.Book;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -11,7 +15,7 @@ import java.sql.SQLException;
  * BookRepository
  */
 public class BookRepository {
-	DatabaseUtils databaseUtils;
+	private DatabaseUtils databaseUtils;
 
 	public BookRepository() {
 		this(null);
